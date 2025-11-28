@@ -2,6 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -24,16 +25,14 @@ export default function SignUpPage() {
     countryData.find((c) => c.code === "LB") || countryData[0]
   );
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordVisible, setPasswordVisible] = useState(false);
-  const [passwordVisible2, setPasswordVisible2] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [errors, setErrors] = useState({
     fullName: "",
     phone: "",
-    password: "",
-    confirmPassword: "",
+    otp: "",
   });
 
   const validateFullName = (name: string) => {
@@ -53,25 +52,11 @@ export default function SignUpPage() {
 
   const maxLength = PHONE_LENGTHS[selectedCountry?.code] ?? 10;
 
-  const passwordRules = {
-    length: password.length >= 6,
-    upper: /[A-Z]/.test(password),
-    lower: /[a-z]/.test(password),
-    number: /[0-9]/.test(password),
-  };
-
-  const passwordIsValid =
-    passwordRules.length &&
-    passwordRules.upper &&
-    passwordRules.lower &&
-    passwordRules.number;
-
-  const handleSignUp = async () => {
+  const handleSendOTP = async () => {
     let newErrors = {
       fullName: "",
       phone: "",
-      password: "",
-      confirmPassword: "",
+      otp: "",
     };
 
     newErrors.fullName = validateFullName(fullName);
@@ -79,41 +64,142 @@ export default function SignUpPage() {
     if (phone.length < maxLength)
       newErrors.phone = `Phone number must be ${maxLength} digits`;
 
-    if (!passwordIsValid)
-      newErrors.password = "Password is not valid";
-
-    if (password !== confirmPassword)
-      newErrors.confirmPassword = "Passwords do not match";
-
     setErrors(newErrors);
 
     if (Object.values(newErrors).some((v) => v !== "")) return;
 
+    setLoading(true);
+
     const fullPhone = `${selectedCountry.dial_code}${phone}`;
 
-    const { data: authData, error: signupError } = await supabase.auth.signUp({
-      phone: fullPhone,
-      password: password,
-    });
+    try {
+      console.log("Sending OTP to:", fullPhone);
+      
+      const { data, error } = await supabase.functions.invoke("send-otp", {
+        body: { phone: fullPhone },
+      });
 
-    if (signupError) {
-      setErrors((prev) => ({ ...prev, password: signupError.message }));
+      if (error) {
+        console.error("Send OTP error:", error);
+        setErrors((prev) => ({ ...prev, phone: error.message || "Failed to send OTP" }));
+        Alert.alert("Error", error.message || "Failed to send OTP");
+        return;
+      }
+
+      if (!data?.success) {
+        const errorMsg = data?.error || "Failed to send OTP";
+        console.error("Send OTP failed:", errorMsg);
+        setErrors((prev) => ({ ...prev, phone: errorMsg }));
+        Alert.alert("Error", errorMsg);
+        return;
+      }
+
+      console.log("OTP sent successfully");
+      setOtpSent(true);
+      Alert.alert("Success", "OTP sent to your phone number");
+    } catch (err) {
+      console.error("Send OTP exception:", err);
+      Alert.alert("Error", "Failed to send OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (otp.length !== 6) {
+      setErrors((prev) => ({ ...prev, otp: "OTP must be 6 digits" }));
       return;
     }
 
-    const user = authData.user;
-    if (!user) return;
+    setLoading(true);
 
-    await supabase.from("Costumer_profiles_ORDO").insert({
-      user_id: user.id,
-      full_name: fullName,
-      country_code: selectedCountry.code,
-      dial_code: selectedCountry.dial_code,
-      phone,
-      full_phone: fullPhone,
-    });
+    const fullPhone = `${selectedCountry.dial_code}${phone}`;
 
-    router.push("/");
+    try {
+      console.log("Verifying OTP...");
+
+      // Call verify-otp Edge Function with full name
+      const { data, error } = await supabase.functions.invoke("verify-otp", {
+        body: {
+          phone: fullPhone,
+          otp: otp,
+          fullName: fullName, // Send full name for user creation
+        },
+      });
+
+      if (error) {
+        console.error("Verify OTP error:", error);
+        setErrors((prev) => ({ ...prev, otp: error.message || "Failed to verify OTP" }));
+        Alert.alert("Error", error.message || "Failed to verify OTP");
+        return;
+      }
+
+      if (!data?.success) {
+        const errorMsg = data?.error || "Invalid OTP";
+        console.error("Verify failed:", errorMsg);
+        setErrors((prev) => ({ ...prev, otp: errorMsg }));
+        Alert.alert("Error", errorMsg);
+        return;
+      }
+
+      console.log("OTP verified successfully:", data);
+
+      const user = data.user;
+      if (!user) {
+        Alert.alert("Error", "User not found");
+        return;
+      }
+
+      // Check if profile already exists
+      const { data: existingProfile, error: profileError } = await supabase
+        .from("Costumer_profiles_ORDO")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Profile check error:", profileError);
+      }
+
+      // Create profile if it doesn't exist
+      if (!existingProfile) {
+        console.log("Creating user profile...");
+        
+        const { error: insertError } = await supabase
+          .from("Costumer_profiles_ORDO")
+          .insert({
+            user_id: user.id,
+            full_name: fullName,
+            country_code: selectedCountry.code,
+            dial_code: selectedCountry.dial_code,
+            phone: phone,
+            full_phone: fullPhone,
+          });
+
+        if (insertError) {
+          console.error("Profile creation error:", insertError);
+          Alert.alert("Error", "Account created but profile setup failed. Please contact support.");
+          return;
+        }
+
+        console.log("✅ Profile created successfully!");
+      } else {
+        console.log("Profile already exists");
+      }
+
+      // Success! Navigate to home
+      Alert.alert("Success", "Account created successfully!", [
+        {
+          text: "OK",
+          onPress: () => router.replace("/home"),
+        },
+      ]);
+    } catch (err) {
+      console.error("Verification exception:", err);
+      Alert.alert("Error", "Failed to verify OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -123,8 +209,17 @@ export default function SignUpPage() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <SafeAreaView style={styles.screen}>
-
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => {
+              if (otpSent) {
+                setOtpSent(false);
+                setOtp("");
+              } else {
+                router.back();
+              }
+            }}
+          >
             <Ionicons name="arrow-back" size={26} color="#1C1C1E" />
           </TouchableOpacity>
 
@@ -134,128 +229,126 @@ export default function SignUpPage() {
             </View>
           </View>
 
-          <Text style={styles.title}>Create New Account</Text>
+          <Text style={styles.title}>
+            {otpSent ? "Verify OTP" : "Create New Account"}
+          </Text>
 
-          {/* FULL NAME */}
-          <View style={styles.inputRow}>
-            <Ionicons name="person-outline" size={20} color="#8A8E94" />
-            <TextInput
-              style={styles.input}
-              placeholder="Full Name"
-              placeholderTextColor="#8A8E94"
-              value={fullName}
-              onChangeText={setFullName}
-            />
-          </View>
-          {errors.fullName ? <Text style={styles.error}>{errors.fullName}</Text> : null}
-
-          {/* PHONE */}
-          <View style={styles.phoneRow}>
-            <NumberPicker
-              selected={selectedCountry}
-              onSelect={(country) => {
-                setSelectedCountry(country);
-                setPhone("");
-              }}
-            />
-
-            <Text style={styles.dialCode}>{selectedCountry?.dial_code}</Text>
-
-            <TextInput
-              style={styles.phoneInput}
-              value={phone}
-              onChangeText={(t) => {
-                if (t.length <= maxLength) setPhone(t);
-              }}
-              keyboardType="number-pad"
-              placeholder="Phone Number"
-              placeholderTextColor="#8A8E94"
-            />
-          </View>
-          {errors.phone ? <Text style={styles.error}>{errors.phone}</Text> : null}
-
-          {/* PASSWORD */}
-          <View style={styles.inputRow}>
-            <Ionicons name="lock-closed-outline" size={20} color="#8A8E94" />
-            <TextInput
-              style={styles.input}
-              secureTextEntry={!passwordVisible}
-              placeholder="Password"
-              placeholderTextColor="#8A8E94"
-              value={password}
-              onChangeText={setPassword}
-            />
-            <TouchableOpacity onPress={() => setPasswordVisible(!passwordVisible)}>
-              <Ionicons
-                name={passwordVisible ? "eye-off-outline" : "eye-outline"}
-                size={22}
-                color="#1C1C1E"
-              />
-            </TouchableOpacity>
-          </View>
-
-          {errors.password ? (
+          {!otpSent ? (
             <>
-              <Text style={styles.error}>{errors.password}</Text>
-
-              <View style={styles.reqGrid}>
-                <View style={styles.reqColumn}>
-                  <Text style={[styles.req, passwordRules.upper && styles.reqOK]}>
-                    • Uppercase
-                  </Text>
-                  <Text style={[styles.req, passwordRules.number && styles.reqOK]}>
-                    • Number
-                  </Text>
-                </View>
-
-                <View style={styles.reqColumn}>
-                  <Text style={[styles.req, passwordRules.lower && styles.reqOK]}>
-                    • Lowercase
-                  </Text>
-                  <Text style={[styles.req, passwordRules.length && styles.reqOK]}>
-                    • 6+ chars
-                  </Text>
-                </View>
+              {/* FULL NAME */}
+              <View style={styles.inputRow}>
+                <Ionicons name="person-outline" size={20} color="#8A8E94" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Full Name"
+                  placeholderTextColor="#8A8E94"
+                  value={fullName}
+                  onChangeText={setFullName}
+                  autoCapitalize="words"
+                />
               </View>
+              {errors.fullName ? (
+                <Text style={styles.error}>{errors.fullName}</Text>
+              ) : null}
+
+              {/* PHONE */}
+              <View style={styles.phoneRow}>
+                <NumberPicker
+                  selected={selectedCountry}
+                  onSelect={(country) => {
+                    setSelectedCountry(country);
+                    setPhone("");
+                  }}
+                />
+
+                <Text style={styles.dialCode}>{selectedCountry?.dial_code}</Text>
+
+                <TextInput
+                  style={styles.phoneInput}
+                  value={phone}
+                  onChangeText={(t) => {
+                    if (t.length <= maxLength) setPhone(t);
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="Phone Number"
+                  placeholderTextColor="#8A8E94"
+                />
+              </View>
+              {errors.phone ? <Text style={styles.error}>{errors.phone}</Text> : null}
+
+              {/* SEND OTP BUTTON */}
+              <TouchableOpacity
+                style={[styles.signInBtn, loading && styles.btnDisabled]}
+                onPress={handleSendOTP}
+                disabled={loading}
+              >
+                <Text style={styles.signInText}>
+                  {loading ? "Sending..." : "Send OTP"}
+                </Text>
+              </TouchableOpacity>
             </>
-          ) : null}
+          ) : (
+            <>
+              {/* OTP INPUT */}
+              <Text style={styles.otpInfo}>
+                Enter the 6-digit code sent to {selectedCountry.dial_code}
+                {phone}
+              </Text>
 
-          {/* CONFIRM PASSWORD */}
-          <View style={styles.inputRow}>
-            <Ionicons name="lock-closed-outline" size={20} color="#8A8E94" />
-            <TextInput
-              style={styles.input}
-              secureTextEntry={!passwordVisible2}
-              placeholder="Confirm Password"
-              placeholderTextColor="#8A8E94"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
-            <TouchableOpacity onPress={() => setPasswordVisible2(!passwordVisible2)}>
-              <Ionicons
-                name={passwordVisible2 ? "eye-off-outline" : "eye-outline"}
-                size={22}
-                color="#1C1C1E"
-              />
-            </TouchableOpacity>
-          </View>
-          {errors.confirmPassword ? (
-            <Text style={styles.error}>{errors.confirmPassword}</Text>
-          ) : null}
+              <View style={styles.inputRow}>
+                <Ionicons name="lock-closed-outline" size={20} color="#8A8E94" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter OTP"
+                  placeholderTextColor="#8A8E94"
+                  value={otp}
+                  onChangeText={(text) => {
+                    const cleaned = text.replace(/[^0-9]/g, "");
+                    if (cleaned.length <= 6) {
+                      setOtp(cleaned);
+                    }
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                />
+              </View>
+              {errors.otp ? <Text style={styles.error}>{errors.otp}</Text> : null}
 
-          {/* REGISTER BUTTON */}
-          <TouchableOpacity style={styles.signInBtn} onPress={handleSignUp}>
-            <Text style={styles.signInText}>Register</Text>
-          </TouchableOpacity>
+              {/* VERIFY BUTTON */}
+              <TouchableOpacity
+                style={[styles.signInBtn, loading && styles.btnDisabled]}
+                onPress={handleVerifyOTP}
+                disabled={loading}
+              >
+                <Text style={styles.signInText}>
+                  {loading ? "Verifying..." : "Verify & Sign Up"}
+                </Text>
+              </TouchableOpacity>
+
+              {/* RESEND OTP */}
+              <TouchableOpacity
+                onPress={handleSendOTP}
+                disabled={loading}
+                style={styles.resendBtn}
+              >
+                <Text style={styles.resendText}>
+                  Didn't receive code?{" "}
+                  <Text style={{ fontWeight: "700" }}>Resend</Text>
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
 
           {/* LOGIN LINK */}
-          <TouchableOpacity onPress={() => router.push("/")}>
-            <Text style={styles.bottomText}>
-              Already have an account?{" "}
-              <Text style={{ color: "#00C4CC", fontWeight: "700" }}>Sign In</Text>
-            </Text>
-          </TouchableOpacity>
-
+          {!otpSent && (
+            <TouchableOpacity onPress={() => router.push("/")}>
+              <Text style={styles.bottomText}>
+                Already have an account?{" "}
+                <Text style={{ color: "#00C4CC", fontWeight: "700" }}>Sign In</Text>
+              </Text>
+            </TouchableOpacity>
+          )}
         </SafeAreaView>
       </KeyboardAvoidingView>
     </Pressable>
@@ -354,26 +447,12 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
 
-  reqGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 6,
-    paddingHorizontal: 6,
-  },
-
-  reqColumn: {
-    width: "48%",
-  },
-
-  req: {
-    color: "#8A8E94",
-    fontSize: 13,
-    marginTop: 2,
-  },
-
-  reqOK: {
-    color: "#00C4CC",
-    fontWeight: "700",
+  otpInfo: {
+    fontSize: 15,
+    color: "#6C7278",
+    marginBottom: 10,
+    textAlign: "center",
+    lineHeight: 22,
   },
 
   signInBtn: {
@@ -385,10 +464,24 @@ const styles = StyleSheet.create({
     marginTop: 26,
   },
 
+  btnDisabled: {
+    opacity: 0.6,
+  },
+
   signInText: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "700",
+  },
+
+  resendBtn: {
+    marginTop: 16,
+    alignItems: "center",
+  },
+
+  resendText: {
+    fontSize: 15,
+    color: "#00C4CC",
   },
 
   bottomText: {
