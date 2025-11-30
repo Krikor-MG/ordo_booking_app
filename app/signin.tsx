@@ -243,14 +243,16 @@ export default function SignInPage() {
                   placeholder="Enter OTP"
                   placeholderTextColor="#8A8E94"
                   value={otp}
-                  onChangeText={(text) => {
-                    const cleaned = text.replace(/[^0-9]/g, "");
-                    if (cleaned.length <= 6) {
-                      setOtp(cleaned);
-                    }
-                  }}
-                  keyboardType="number-pad"
-                  maxLength={6}
+                 onChangeText={(text) => {
+  if (text.length <= 6) {
+    setOtp(text);  // allow letters + numbers
+  }
+}}
+inputMode="text"           // 🔥 Full keyboard
+autoCapitalize="characters"
+autoCorrect={false}
+maxLength={6}
+
                 />
               </View>
               {errors.otp ? <Text style={styles.error}>{errors.otp}</Text> : null}
