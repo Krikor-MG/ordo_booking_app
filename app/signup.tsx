@@ -303,12 +303,12 @@ export default function SignUpPage() {
                   placeholderTextColor="#8A8E94"
                   value={otp}
                   onChangeText={(text) => {
-                    const cleaned = text.replace(/[^0-9]/g, "");
+                    const cleaned = text //.replace(/[^0-9]/g, "");
                     if (cleaned.length <= 6) {
                       setOtp(cleaned);
                     }
                   }}
-                  keyboardType="number-pad"
+                  keyboardType="default"
                   maxLength={6}
                   autoFocus
                 />
