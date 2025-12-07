@@ -10,22 +10,25 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../src/lib/Authcontext";
 import { supabase } from "../../src/lib/supabase";
+
 
 export default function AccountPage() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
+  // const { isAuthenticated } = useAuth();
+  const { user } = useAuth();
 
+  console.log(user?.phone);
+  console.log(user?.profile);
+  console.log(user?.profile?.full_name);
   useEffect(() => {
     loadProfile();
   }, []);
 
   async function loadProfile() {
     setLoading(true);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
 
     if (!user) {
       // no session → treat as guest
@@ -35,13 +38,8 @@ export default function AccountPage() {
     }
 
     // load from your profile table
-    const { data: userProfile } = await supabase
-      .from("Costumer_profiles_ORDO")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
 
-    setProfile(userProfile || null);
+    setProfile(user.profile || null);
     setLoading(false);
   }
 
@@ -64,7 +62,6 @@ export default function AccountPage() {
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView showsVerticalScrollIndicator={false}>
-
         {/* HEADER CARD */}
         <View style={styles.headerCard}>
           <View style={styles.headerLeft}>
@@ -110,18 +107,20 @@ export default function AccountPage() {
         ) : (
           <>
             {/* GUEST CONTENT */}
+
             <Section>
               <Item label="About" icon="information-circle-outline" />
               <Item label="Contact Us" icon="chatbubbles-outline" />
-              <Item
-                label="Login"
-                icon="log-in-outline"
-                onPress={() => router.push("/signin")}
-              />
+              {/* {!isAuthenticated && ( */}
+                <Item
+                  label="Login"
+                  icon="log-in-outline"
+                  onPress={() => router.push("/signin")}
+                />
+              {/* )} */}
             </Section>
           </>
         )}
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -176,6 +175,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: "#1C1C1E",
+    zIndex: 1,
   },
 
   phoneText: {
