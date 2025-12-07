@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -18,6 +19,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import NumberPicker from "../src/lib/NumberPicker";
 import countryData from "../src/lib/countryData";
 import { supabase } from "../src/lib/supabase";
+
+const SESSION_KEY = "@user_session";
+const USER_DATA_KEY = "@user_data";
+
+// Generate a simple session token on the client side
+const generateClientToken = () => {
+  return `client_${Date.now()}_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
+};
 
 export default function SignInPage() {
   const [selectedCountry, setSelectedCountry] = useState(
@@ -41,6 +50,39 @@ export default function SignInPage() {
 
   const maxLength = PHONE_LENGTHS[selectedCountry?.code] ?? 10;
 
+  // Check for existing session on mount
+  useEffect(() => {
+    checkExistingSession();
+  }, []);
+
+  const checkExistingSession = async () => {
+    try {
+      const sessionToken = await AsyncStorage.getItem(SESSION_KEY);
+      const userData = await AsyncStorage.getItem(USER_DATA_KEY);
+      
+      if (sessionToken && userData) {
+        console.log("Found existing session, redirecting to home");
+        router.replace("/home");
+      }
+    } catch (error) {
+      console.error("Error checking session:", error);
+    }
+  };
+
+  const saveSession = async (sessionToken: string, userData: any) => {
+    try {
+      if (!sessionToken) {
+        throw new Error("Session token is required");
+      }
+      await AsyncStorage.setItem(SESSION_KEY, sessionToken);
+      await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+      console.log("Session saved successfully");
+    } catch (error) {
+      console.error("Error saving session:", error);
+      throw error;
+    }
+  };
+
   const handleSendOTP = async () => {
     let newErrors = {
       phone: "",
@@ -59,10 +101,13 @@ export default function SignInPage() {
     const fullPhone = `${selectedCountry.dial_code}${phone}`;
 
     try {
-      // Call custom Edge Function to send OTP via bestbulksms.com
+      console.log("Sending OTP to:", fullPhone);
+      
       const { data, error } = await supabase.functions.invoke("send-otp", {
         body: { phone: fullPhone },
       });
+
+      console.log("Send OTP response:", { data, error });
 
       if (error) {
         console.error("Send OTP error:", error);
@@ -98,6 +143,8 @@ export default function SignInPage() {
     const fullPhone = `${selectedCountry.dial_code}${phone}`;
 
     try {
+      console.log("Verifying OTP for:", fullPhone);
+      
       // Call custom Edge Function to verify OTP
       const { data, error } = await supabase.functions.invoke("verify-otp", {
         body: {
@@ -106,33 +153,52 @@ export default function SignInPage() {
         },
       });
 
+      // Log the full response for debugging
+      console.log("Verify OTP full response:", JSON.stringify({ data, error }, null, 2));
+
       if (error) {
         console.error("Verify OTP error:", error);
-        setErrors((prev) => ({ ...prev, otp: error.message || "Failed to verify OTP" }));
-        Alert.alert("Error", error.message || "Failed to verify OTP");
+        console.error("Error details:", JSON.stringify(error, null, 2));
+        setErrors((prev) => ({ 
+          ...prev, 
+          otp: error.message || "Failed to verify OTP" 
+        }));
+        Alert.alert(
+          "Error", 
+          error.message || "Failed to verify OTP. Please check your OTP and try again."
+        );
         return;
       }
 
-      if (!data.success) {
+      // Check if the response indicates failure
+      if (data && !data.success) {
+        console.error("Verification failed:", data.error);
         setErrors((prev) => ({ ...prev, otp: data.error || "Invalid OTP" }));
         Alert.alert("Error", data.error || "Invalid OTP");
         return;
       }
 
-      const user = data.user;
+      // Check if user data exists in response
+      const user = data?.user;
       if (!user) {
-        Alert.alert("Error", "User not found");
+        console.error("No user in response:", data);
+        Alert.alert("Error", "User not found in response");
         return;
       }
 
+      console.log("OTP verified successfully, checking profile...");
+
       // Check if user profile exists
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from("Costumer_profiles_ORDO")
         .select("*")
         .eq("full_phone", fullPhone)
         .single();
 
-      if (!profileData) {
+      console.log("Profile query result:", { profileData, profileError });
+
+      if (profileError || !profileData) {
+        console.error("Profile not found:", profileError);
         Alert.alert(
           "Account Not Found",
           "No account found with this phone number. Please sign up first.",
@@ -150,12 +216,33 @@ export default function SignInPage() {
         return;
       }
 
+      // Get session token from response or generate one
+      let sessionToken = data.sessionToken || data.token;
+      
+      if (!sessionToken) {
+        console.warn("No session token from server, generating client token");
+        sessionToken = generateClientToken();
+      }
+
+      console.log("Saving session with token:", sessionToken.substring(0, 20) + "...");
+
+      // Save session token and user data
+      await saveSession(sessionToken, {
+        phone: fullPhone,
+        userId: user.id || profileData.id,
+        profile: profileData,
+        timestamp: new Date().toISOString(),
+      });
+
       // Successfully verified
+      console.log("Sign in successful!");
       Alert.alert("Success", "Signed in successfully!");
       router.replace("/home");
+      
     } catch (err) {
       console.error("Verification exception:", err);
-      Alert.alert("Error", "Failed to verify OTP. Please try again.");
+      console.error("Exception details:", JSON.stringify(err, null, 2));
+      // Alert.alert("Error", `Failed to verify OTP: ${err.message || "Unknown error"}`);
     } finally {
       setLoading(false);
     }
@@ -175,6 +262,7 @@ export default function SignInPage() {
               onPress={() => {
                 setOtpSent(false);
                 setOtp("");
+                setErrors({ phone: "", otp: "" });
               }}
             >
               <Ionicons name="arrow-back" size={26} color="#1C1C1E" />
