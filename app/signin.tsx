@@ -1,5 +1,4 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -15,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../src/lib/Authcontext";
 
 import NumberPicker from "../src/lib/NumberPicker";
 import countryData from "../src/lib/countryData";
@@ -36,7 +36,8 @@ export default function SignInPage() {
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
-
+  const { signIn } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [errors, setErrors] = useState({
     phone: "",
     otp: "",
@@ -50,38 +51,45 @@ export default function SignInPage() {
 
   const maxLength = PHONE_LENGTHS[selectedCountry?.code] ?? 10;
 
-  // Check for existing session on mount
+    
   useEffect(() => {
-    checkExistingSession();
-  }, []);
+    if (isAuthenticated) {
+      router.replace("/home");
+    }
+  }, [isAuthenticated]);
 
-  const checkExistingSession = async () => {
-    try {
-      const sessionToken = await AsyncStorage.getItem(SESSION_KEY);
-      const userData = await AsyncStorage.getItem(USER_DATA_KEY);
+  // Check for existing session on mount
+  // useEffect(() => {
+  //   checkExistingSession();
+  // }, []);
+
+  // const checkExistingSession = async () => {
+  //   try {
+  //     const sessionToken = await AsyncStorage.getItem(SESSION_KEY);
+  //     const userData = await AsyncStorage.getItem(USER_DATA_KEY);
       
-      if (sessionToken && userData) {
-        console.log("Found existing session, redirecting to home");
-        router.replace("/home");
-      }
-    } catch (error) {
-      console.error("Error checking session:", error);
-    }
-  };
+  //     if (sessionToken && userData) {
+  //       console.log("Found existing session, redirecting to home");
+  //       router.replace("/home");
+  //     }
+  //   } catch (error) {
+  //     console.error("Error checking session:", error);
+  //   }
+  // };
 
-  const saveSession = async (sessionToken: string, userData: any) => {
-    try {
-      if (!sessionToken) {
-        throw new Error("Session token is required");
-      }
-      await AsyncStorage.setItem(SESSION_KEY, sessionToken);
-      await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-      console.log("Session saved successfully");
-    } catch (error) {
-      console.error("Error saving session:", error);
-      throw error;
-    }
-  };
+  // const saveSession = async (sessionToken: string, userData: any) => {
+  //   try {
+  //     if (!sessionToken) {
+  //       throw new Error("Session token is required");
+  //     }
+  //     await AsyncStorage.setItem(SESSION_KEY, sessionToken);
+  //     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+  //     console.log("Session saved successfully");
+  //   } catch (error) {
+  //     console.error("Error saving session:", error);
+  //     throw error;
+  //   }
+  // };
 
   const handleSendOTP = async () => {
     let newErrors = {
@@ -227,12 +235,19 @@ export default function SignInPage() {
       console.log("Saving session with token:", sessionToken.substring(0, 20) + "...");
 
       // Save session token and user data
-      await saveSession(sessionToken, {
+      // await saveSession(sessionToken, {
+      //   phone: fullPhone,
+      //   userId: user.id || profileData.id,
+      //   profile: profileData,
+      //   timestamp: new Date().toISOString(),
+      // });
+      await signIn(sessionToken, {
         phone: fullPhone,
-        userId: user.id || profileData.id,
+        userId: user.id,
         profile: profileData,
         timestamp: new Date().toISOString(),
       });
+
 
       // Successfully verified
       console.log("Sign in successful!");

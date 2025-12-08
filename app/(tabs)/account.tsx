@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/lib/Authcontext";
-import { supabase } from "../../src/lib/supabase";
 
 
 export default function AccountPage() {
@@ -19,6 +18,7 @@ export default function AccountPage() {
   const [profile, setProfile] = useState<any>(null);
   // const { isAuthenticated } = useAuth();
   const { user } = useAuth();
+  const { signOut } = useAuth();
 
   console.log(user?.phone);
   console.log(user?.profile);
@@ -44,7 +44,7 @@ export default function AccountPage() {
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    signOut();
     setProfile(null);
     router.replace("/signin");
   }
