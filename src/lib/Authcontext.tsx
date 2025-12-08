@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import React, { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { checkSession, clearSession, saveSession, UserData } from "./sessionUtils";
+import { supabase } from "./supabase";
 
 interface AuthContextType {
   user: UserData | null;
@@ -10,6 +11,7 @@ interface AuthContextType {
   signIn: (token: string, userData: UserData) => Promise<void>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  updateUserProfile: (updatedProfile: any) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -65,6 +67,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const refreshSession = async () => {
     await checkExistingSession();
   };
+  const updateUserProfile = async (updatedProfile: any) => {
+    try {
+      // Fetch the latest profile from database
+      const { data, error } = await supabase
+        .from('Costumer_profiles_ORDO')
+        .select('*')
+        .eq('id', user?.profile?.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data && user) {
+        const updatedUser = {
+          ...user,
+          profile: data
+        };
+        
+        // Update state
+        setUser(updatedUser);
+        
+        // Update local storage
+        if (token) {
+          await saveSession(token, updatedUser);
+        }
+      }
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      throw error;
+    }
+  };
 
   const value = {
     user,
@@ -74,6 +106,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     signIn,
     signOut,
     refreshSession,
+    updateUserProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -58,39 +58,6 @@ export default function SignInPage() {
     }
   }, [isAuthenticated]);
 
-  // Check for existing session on mount
-  // useEffect(() => {
-  //   checkExistingSession();
-  // }, []);
-
-  // const checkExistingSession = async () => {
-  //   try {
-  //     const sessionToken = await AsyncStorage.getItem(SESSION_KEY);
-  //     const userData = await AsyncStorage.getItem(USER_DATA_KEY);
-      
-  //     if (sessionToken && userData) {
-  //       console.log("Found existing session, redirecting to home");
-  //       router.replace("/home");
-  //     }
-  //   } catch (error) {
-  //     console.error("Error checking session:", error);
-  //   }
-  // };
-
-  // const saveSession = async (sessionToken: string, userData: any) => {
-  //   try {
-  //     if (!sessionToken) {
-  //       throw new Error("Session token is required");
-  //     }
-  //     await AsyncStorage.setItem(SESSION_KEY, sessionToken);
-  //     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-  //     console.log("Session saved successfully");
-  //   } catch (error) {
-  //     console.error("Error saving session:", error);
-  //     throw error;
-  //   }
-  // };
-
   const handleSendOTP = async () => {
     let newErrors = {
       phone: "",

@@ -83,7 +83,11 @@ export default function AccountPage() {
         {isLoggedIn ? (
           <>
             <Section>
-              <Item label="Profile" icon="person-outline" />
+              <Item 
+                label="Profile" 
+                icon="person-outline" 
+                onPress={() => router.push("../profile-settings")} // or your route path
+              />
               <Item label="Addresses" icon="location-outline" />
               <Item label="Payment Methods" icon="card-outline" />
               <Item label="Favorites" icon="heart-outline" />
