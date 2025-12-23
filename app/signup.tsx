@@ -123,7 +123,10 @@ export default function SignUpPage() {
         body: {
           phone: fullPhone,
           otp: otp,
-          fullName: fullName, // Send full name for user creation
+          isSignup: true,
+          fullName: fullName,
+          // dial_code: selectedCountry?.dial_code,
+          countryCode: selectedCountry,
         },
       });
 
@@ -162,30 +165,30 @@ export default function SignUpPage() {
       }
 
       // Create profile if it doesn't exist
-      if (!existingProfile) {
-        console.log("Creating user profile...");
+      // if (!existingProfile) {
+      //   console.log("Creating user profile...");
         
-        const { error: insertError } = await supabase
-          .from("Costumer_profiles_ORDO")
-          .insert({
-            user_id: user.id,
-            full_name: fullName,
-            country_code: selectedCountry.code,
-            dial_code: selectedCountry.dial_code,
-            phone: phone,
-            full_phone: fullPhone,
-          });
+      //   const { error: insertError } = await supabase
+      //     .from("Costumer_profiles_ORDO")
+      //     .insert({
+      //       user_id: user.id,
+      //       full_name: fullName,
+      //       country_code: selectedCountry.code,
+      //       dial_code: selectedCountry.dial_code,
+      //       phone: phone,
+      //       full_phone: fullPhone,
+      //     });
 
-        if (insertError) {
-          console.error("Profile creation error:", insertError);
-          Alert.alert("Error", "Account created but profile setup failed. Please contact support.");
-          return;
-        }
+      //   if (insertError) {
+      //     console.error("Profile creation error:", insertError);
+      //     Alert.alert("Error", "Account created but profile setup failed. Please contact support.");
+      //     return;
+      //   }
 
-        console.log("✅ Profile created successfully!");
-      } else {
-        console.log("Profile already exists");
-      }
+      //   console.log("✅ Profile created successfully!");
+      // } else {
+      //   console.log("Profile already exists");
+      // }
 
       // Success! Navigate to home
       Alert.alert("Success", "Account created successfully!", [
@@ -303,12 +306,12 @@ export default function SignUpPage() {
                   placeholderTextColor="#8A8E94"
                   value={otp}
                   onChangeText={(text) => {
-                    const cleaned = text.replace(/[^0-9]/g, "");
+                    const cleaned = text //.replace(/[^0-9]/g, "");
                     if (cleaned.length <= 6) {
                       setOtp(cleaned);
                     }
                   }}
-                  keyboardType="number-pad"
+                  keyboardType="default"
                   maxLength={6}
                   autoFocus
                 />

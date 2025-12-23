@@ -3,10 +3,12 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
+import { AuthProvider } from "../src/lib/Authcontext";    
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 export default function RootLayout() {
   useEffect(() => {
+  // const { isAuthenticated, isLoading } = useAuth();
     if (Platform.OS === "android") {
       NavigationBar.setBackgroundColorAsync("#FFFFFF");
       NavigationBar.setButtonStyleAsync("dark");
@@ -14,6 +16,12 @@ export default function RootLayout() {
   }, []);
 
   return (
+    <>
+      <AuthProvider>
+        <StatusBar translucent={false} style="dark" backgroundColor="#FFFFFF" />
+        <Stack screenOptions={{ headerShown: false }} />
+      </AuthProvider>
+    </>
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar translucent={false} style="dark" backgroundColor="#FFFFFF" />
       <Stack screenOptions={{ headerShown: false }} />
