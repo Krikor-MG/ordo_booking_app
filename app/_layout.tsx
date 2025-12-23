@@ -3,7 +3,8 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
-import { AuthProvider } from "../src/lib/Authcontext";
+import { AuthProvider } from "../src/lib/Authcontext";    
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 export default function RootLayout() {
   useEffect(() => {
@@ -21,5 +22,9 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }} />
       </AuthProvider>
     </>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <StatusBar translucent={false} style="dark" backgroundColor="#FFFFFF" />
+      <Stack screenOptions={{ headerShown: false }} />
+    </GestureHandlerRootView>
   );
 }
